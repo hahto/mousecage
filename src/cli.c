@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-/* Debug front end: ./mouselock-cli ["Window Owner Name"]
- * e.g. ./mouselock-cli Ghostty  to test without the game. */
 int main(int argc, char **argv) {
     const char *target_owner_name = argc > 1 ? argv[1] : "League Of Legends";
 

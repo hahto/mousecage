@@ -20,7 +20,6 @@ typedef struct {
     pthread_mutex_t bounds_lock;
     CGRect bounds;
 
-    /* Touched only on the tap thread. */
     double last_dx;
     double last_dy;
 #ifdef ML_DEBUG
@@ -28,12 +27,10 @@ typedef struct {
     int bad_events;
 #endif
 
-    /* Touched only by ml_start(). */
     bool tap_thread_started;
     bool poll_thread_started;
 } State;
 
-/* Zero-initialised bounds are an empty rect, which the tap treats as "no target". */
 static State g_state = {
     .enabled     = true,
     .bounds_lock = PTHREAD_MUTEX_INITIALIZER,
@@ -44,7 +41,7 @@ static double clamp(double value, double low, double high) {
 }
 
 
-/*====== WINDOW POLLING ======*/
+/*========= WINDOW POLL =========*/
 
 static bool window_layer(CFDictionaryRef window, int *layer) {
     CFNumberRef layer_ref = CFDictionaryGetValue(window, kCGWindowLayer);
@@ -56,22 +53,19 @@ static bool window_owner_is(CFDictionaryRef window, CFStringRef owner_name) {
     return owner_ref != NULL && CFEqual(owner_ref, owner_name);
 }
 
-/* Window bounds minus the title bar for normal windows. CGRectNull on failure. */
 static CGRect window_content_bounds(CFDictionaryRef window, int layer) {
     CGRect bounds;
     CFDictionaryRef bounds_dict = CFDictionaryGetValue(window, kCGWindowBounds);
     if (bounds_dict == NULL || !CGRectMakeWithDictionaryRepresentation(bounds_dict, &bounds))
         return CGRectNull;
 
-    if (layer == 0) {
-        bounds.origin.y    += TITLEBAR_HEIGHT;
+    if (layer == 0) { 
+        bounds.origin.y += TITLEBAR_HEIGHT;
         bounds.size.height -= TITLEBAR_HEIGHT;
     }
     return bounds;
 }
 
-/* Walks windows front-to-back. Returns the target's bounds if it is the
- * frontmost window, CGRectNull if some other app's window is in front. */
 static CGRect frontmost_target_bounds(CFArrayRef windows, CFStringRef target_name) {
     CFIndex count = CFArrayGetCount(windows);
     for (CFIndex index = 0; index < count; index++) {
@@ -82,11 +76,10 @@ static CGRect frontmost_target_bounds(CFArrayRef windows, CFStringRef target_nam
             continue;
 
         if (window_owner_is(window, target_name))
-            return window_content_bounds(window, layer);  // any layer: fullscreen games sit above 0
+            return window_content_bounds(window, layer);
 
         if (layer == 0)
-            return CGRectNull;  // another app's normal window is in front
-        // layer > 0 and not the target: menubar, Dock, notifications -> ignore
+            return CGRectNull;
     }
     return CGRectNull;
 }
@@ -120,16 +113,12 @@ static void *poll_thread_main(void *arg) {
 }
 
 
-/*====== EVENT TAP ======*/
+/*========= EVENT TAP =========*/
 
 static CGEventRef on_mouse(CGEventTapProxy proxy, CGEventType type,
                            CGEventRef event, void *user_info) {
     (void)proxy;
     State *state = user_info;
-
-#ifdef ML_DEBUG
-    uint64_t start_ns = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
-#endif
 
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
         CGEventTapEnable(state->tap, true);
@@ -161,15 +150,15 @@ static CGEventRef on_mouse(CGEventTapProxy proxy, CGEventType type,
 #ifdef ML_DEBUG
     uint64_t before_warp_ns = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
 #endif
+
     CGWarpMouseCursorPosition(target);
+
 #ifdef ML_DEBUG
-    double after_warp_ns = (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - before_warp_ns) / 1e6;
-#endif
-#ifdef ML_DEBUG
-    double elapsed_ms = (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - start_ns) / 1e6;
-    if (elapsed_ms >= 0.9) {
+    double after_warp_ms = (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - before_warp_ns) / 1e6;
+    
+    if (after_warp_ms >= 2.0) {
         state->bad_events += 1;
-        printf("event %.3f ms, warp %.3f ms| bad events: %d/%d\n", elapsed_ms, after_warp_ns, state->bad_events, state->good_events);
+        printf("warp took %.3f ms | bad events: %d/%d\n", after_warp_ms, state->bad_events, state->good_events);
     } else {
         state->good_events += 1;
     }
@@ -178,8 +167,6 @@ static CGEventRef on_mouse(CGEventTapProxy proxy, CGEventType type,
     return event;
 }
 
-/* The tap gets its own run loop so nothing on the main thread (UI, menus)
- * can ever delay a mouse event. */
 static void *tap_thread_main(void *arg) {
     State *state = arg;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -202,14 +189,14 @@ static bool start_detached_thread(void *(*entry)(void *), void *arg) {
 }
 
 
-/*====== PUBLIC API ======*/
+/*========= PUBLIC =========*/
 
 ml_result ml_start(const char *target_owner_name) {
     State *state = &g_state;
 
     if (!state->poll_thread_started) {
         if (state->target_owner_name != NULL)
-            CFRelease(state->target_owner_name);   // uusintakutsu ennen poll-threadia
+            CFRelease(state->target_owner_name);
         state->target_owner_name = CFStringCreateWithCString(
             kCFAllocatorDefault, target_owner_name, kCFStringEncodingUTF8);
     }

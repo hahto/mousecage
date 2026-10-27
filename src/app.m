@@ -80,7 +80,7 @@ typedef NS_ENUM(NSInteger, AppStatus) {
 
     NSString *version = [NSBundle mainBundle].infoDictionary[@"CFBundleShortVersionString"];
     NSMenuItem *versionItem = [[NSMenuItem alloc]
-        initWithTitle:[NSString stringWithFormat:@"Mouselock %@", version ?: @"dev"]
+        initWithTitle:[NSString stringWithFormat:@"Mousecage %@", version ?: @"dev"]
                action:nil
         keyEquivalent:@""];
     [menu addItem:versionItem];

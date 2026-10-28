@@ -1,5 +1,5 @@
-#ifndef MOUSELOCK_CORE_H
-#define MOUSELOCK_CORE_H
+#ifndef MOUSECAGE_CORE_H
+#define MOUSECAGE_CORE_H
 
 #include <stdbool.h>
 
